@@ -1,0 +1,250 @@
+---
+title: " ADA442 - Project Report"
+author: "Yağız Hikmet Karakuş, Furkan Özelge"
+date: "`r format(Sys.time())`"
+output:
+  word_document:
+    toc: yes
+  pdf_document:
+    number_sections: yes
+    toc: yes
+subtitle: Car Price Performance Categorization
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+Nowadays, the car market and prices have been on the rise in Turkey. In this categorization process, we consider the features of the cars and determine whether their prices are reasonable or not. This is how we want to categorize the cars on the market. In other words, we can say that we measure whether cars are price-performance products or not. In this way, we will be able to interpret more accurately about the real values of the cars. We will be able to more accurately predict the actual prices of cars.
+We assume the tree model work better than logistic reggression Because of  working with all categorical dataset.
+
+# Methodology
+
+We will use Multinomial Classification Problem and Multinomial Logistic Regression. Since our problem is Multinomial Classification Problem, we used the most suitable Decision Tree and Multi Nominal Logistic Regression to make this classification. our data is all categorical and our response variable has 4 value thats why the multinominal logistic Regression is fit best for our dataset.
+# Data Description 
+
+
+We get our Data From UCI's machine leraning repository. Our Data Has 7 features but the last feature is our response feature
+
+CAR car acceptability// response variable
+//independent variables and supersets
+
+. PRICE overall price//superset
+. . buying buying price//independent variable
+. . maint price of the maintenance//independent variable
+. TECH technical characteristics//superset
+. . COMFORT comfort//superset
+. . . doors number of doors//independent variable
+. . . persons capacity in terms of persons to carry//independent variable
+. . . lug_boot the size of luggage boot//independent variable
+. . safety estimated safety of the car//independent variable
+
+all of the variables are cathegorical.
+our Response varible is not a dummy varriable it has 4 class. because it has 4 class we cannot make binomial logistic reggression.
+
+```{r}
+
+set.seed(44164)
+url <- "https://archive.ics.uci.edu/ml/machine-learning-databases/car/car.data"
+
+
+data <- read.csv(url, header= FALSE)
+
+colnames(data)<- c(
+  "buying",
+  "maint",
+  "doors",
+  "persons",
+  "lug_boot",
+  "safety",
+  "response"
+)
+```
+
+
+# Explaratory Data Aanalysis (EDA) and Pre-Processing
+
+
+
+```{r descriptives}
+dim(data)
+```
+```{r}
+summary(data)
+
+```
+```{r}
+str(data)
+```
+we check the structure of data  because all the variables are character and categorical we decide to make them factor.
+
+```{r}
+data$response=as.factor(data$response)
+data$buying <- as.factor(data$buying)
+data$maint <- as.factor(data$maint)
+data$doors <- as.factor(data$doors)
+data$lug_boot <- as.factor(data$lug_boot)
+data$safety <- as.factor(data$safety)
+data$persons <- as.factor(data$persons)
+str(data)
+```
+after that we check if our data has na  values
+
+```{r preprocess}
+apply(is.na(data), 2, sum)
+
+
+```
+
+After that we check corrolation table to understand which complication we can face with and are there highly corrolated 
+```{r}
+library(magrittr) # needs to be run every time you start R and want to use %>%
+library(dplyr)
+library(ggcorrplot)
+model.matrix(~., data=data) %>% 
+  cor(method="spearman") %>% 
+  ggcorrplot(show.diag = F, type="lower", lab=TRUE, lab_size=2)
+
+```
+Our corrolation table it doesn't seen any multicolonority problem
+
+
+```{r}
+table(data$maint,data$buying)
+table(data$safety,data$buying)
+table(data$doors,data$buying)
+table(data$persons,data$buying)
+```
+We can see our data distributed homogenously this can cause multicollinearity but before we check our model we don't want to intervention to this.
+
+## Data Partition
+```{r}
+index=round(nrow(data)*0.8)
+
+train_split=sample(nrow(data),size=index) #train indexes of the data
+train=data[train_split,]
+test=data[-train_split,]
+
+```
+
+
+# Model Fit and Numerical Results
+
+## Multinominal Logistic Regression
+
+
+
+```{r modeling}
+# fit your model for the data
+library(nnet)
+model=multinom(response~. , data=train)
+summary(model)   #produces NAN's value
+
+```
+
+
+
+```{r}
+z=abs(summary(model)$coefficients)/abs(summary(model)$standard.errors)
+p <- (1 - pnorm(abs(z), 0, 1)) * 2
+p
+```
+our variables are significant.
+
+```{r testing}
+# Testing the performance of the fitted model
+pred_log_reg <- predict(model, test, type = "class")
+confusion_matrix=table(test$response, pred_log_reg)
+
+accuracy <- sum(diag(confusion_matrix))/sum(confusion_matrix)
+
+
+accuracy
+
+```
+we have really high acuracy. Multinomial Logistic Regression seems like enough for this categorization. We think The NaN values can be caused of the multicollinarity. in order to solve that we want to drop the problematic column and try to test our new model when we examine when we check our corrolation matrix we see ther are the highest corrolation on saftey so we decide to drop that independent variable
+
+
+```{r}
+# fit your model for the data
+library(nnet)
+model2=multinom(response~.- safety , data=train)
+summary(model2)   
+```
+
+We see our NaN values dissapear but AIC and Deviance values increase rapidly it will affect our accuracy in order to check we train our data
+
+```{r}
+pred_log_reg2 <- predict(model2, test, type = "class")
+confusion_matrix2=table(test$response, pred_log_reg2)
+
+accuracy <- sum(diag(confusion_matrix2))/sum(confusion_matrix2)
+
+
+accuracy
+```
+We decide that to go on with our first model. because of high accuracy and lower Residual deviance and AIC values.
+
+## Decision Tree 
+
+```{r}
+library(tree)
+tree.model <- tree(response ~ ., data=train)
+summary(tree.model)
+plot(tree.model)
+text(tree.model)
+```
+
+```{r}
+pred.tree <- predict(tree.model, test, type = "class")
+
+tree_confMat <- table(test$response,pred.tree)
+tree_confMat
+tree_accuracy <- sum(diag(tree_confMat))/sum(tree_confMat)
+tree_accuracy
+```
+```{r}
+cv_tree <- cv.tree(tree.model, FUN = prune.misclass)
+par(mfrow = c(1, 2))
+plot(cv_tree$size, cv_tree$dev, type = "b")
+plot(cv_tree$k, cv_tree$dev, type = "b")
+```
+
+```{r}
+new.tree <- prune.misclass(tree.model, best = 13)
+plot(new.tree)
+text(new.tree)
+
+```
+```{r}
+
+pred.tree_prune2 <- predict(new.tree, test, type = "class")
+
+tree_confMat2 <- table(test$response,pred.tree_prune2)
+tree_confMat2
+tree_accuracy2 <- sum(diag(tree_confMat2))/sum(tree_confMat2)
+tree_accuracy2
+```
+
+Our Accuracy and confusion matrix didn't change and we see we can get the same result with less nodes.
+
+
+```{r comparison}
+summary(new.tree)
+summary(model)
+```
+The residual deviance of the decison trr model seems more than multinominal logistic regression also when we check their accuracy level.Even if there is a small difference 
+Multinominal Logistic Regression is better than Decsion Tree for categrize our dataset.
+# Conclusions 
+
+We worked with a data set that was difficult to work with. For this reason, although we achieved what we wanted, we faced some problems. We worked really hard to make the Classification, but sometimes, no matter how well we work with the right method, things don't go the way we want. The Decision Tree and Multi Nominal Regression we used to make the Classification were sufficient for us, but we still ran into a problem. This problem was caused by our dataset. When we crosstable the independent variables from our dataset, we saw that they were distributed very homogeneously. In fact, they all had the same value. For this reason, we realized that our data is more suitable for decision tree than logistic regression. But when we test our data with different models we found ou Multinominal Logistic Regression is better to apply for our data this reason 
+we choose the multinomial. logistic regression for our final
+conclusion
+# References 
+
+
+- Marko Bohanec (1997, June 01). Car Evaluation Data Set. Retrieved January 20, 2022, from https://archive.ics.uci.edu/ml/datasets/Car+Evaluation
+
+
